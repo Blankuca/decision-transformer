@@ -18,6 +18,7 @@ import pickle
 import blosc
 import argparse
 from create_dataset import create_dataset
+import pickle
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--seed', type=int, default=123)
@@ -28,7 +29,7 @@ parser.add_argument('--num_steps', type=int, default=500000)
 parser.add_argument('--num_buffers', type=int, default=50)
 parser.add_argument('--game', type=str, default='Breakout')
 parser.add_argument('--batch_size', type=int, default=128)
-# 
+parser.add_argument("--train", type=bool, default=False)
 parser.add_argument('--trajectories_per_buffer', type=int, default=10, help='Number of trajectories to sample from each of the buffers.')
 parser.add_argument('--data_dir_prefix', type=str, default='./dqn_replay/')
 args = parser.parse_args()
@@ -87,4 +88,24 @@ tconf = TrainerConfig(max_epochs=epochs, batch_size=args.batch_size, learning_ra
                       num_workers=4, seed=args.seed, model_type=args.model_type, game=args.game, max_timestep=max(timesteps))
 trainer = Trainer(model, train_dataset, None, tconf)
 
-trainer.train()
+
+if args.train:
+    trainer.train()
+    #torch.save(model.state_dict(), f"saved_models/state_dict_{args.game}.pt")
+    torch.save(model, f"saved_models/model_{args.game}.pt")
+
+else:
+    model = torch.load(f"saved_models/model_{args.game}.pt")
+   # model.load_state_dict(torch.load(f"saved_models/state_dict_{args.game}.pt"))
+    model.eval()
+
+    rewards, actions = trainer.get_trayectory()
+
+    with open('actions.txt', 'wb') as fp:
+        pickle.dump(actions.tolist(), fp)
+
+    with open('rewards.txt', 'wb') as fp:
+        pickle.dump(rewards, fp)
+
+    #with open ('actions.txt', 'rb') as fp:
+    #    actions = pickle.load(fp)
