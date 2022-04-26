@@ -21,7 +21,7 @@
             "program": "gym/experiment.py",
             "console": "integratedTerminal",
             "justMyCode": true,
-            "args": ["--env=hopper", "--dataset=medium","--model_type=dt","--log_to_wandb=True","--max_iters=3","--device=cpu"],
+            "args": ["--env=hopper", "--dataset=medium","--model_type=dt","--log_to_wandb=False","--max_iters=3","--device=cpu", "--warmup_steps=10",  "--num_steps_per_iter=10"],
             //"preLaunchTask": "run-gpu"
         },
         {
