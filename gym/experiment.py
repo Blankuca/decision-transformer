@@ -14,6 +14,7 @@ from decision_transformer.models.mlp_bc import MLPBCModel
 from decision_transformer.training.act_trainer import ActTrainer
 from decision_transformer.training.seq_trainer import SequenceTrainer
 
+import lbforaging
 
 def discount_cumsum(x, gamma):
     discount_cumsum = np.zeros_like(x)
@@ -35,50 +36,56 @@ def experiment(
     group_name = f'{exp_prefix}-{env_name}-{dataset}'
     exp_prefix = f'{group_name}-{random.randint(int(1e5), int(1e6) - 1)}'
 
-    if env_name == 'hopper':
-        env = gym.make('Hopper-v3')
-        max_ep_len = 1000
-        env_targets = [3600, 1800]  # evaluation conditioning targets
-        scale = 1000.  # normalization for rewards/returns
-    elif env_name == 'halfcheetah':
-        env = gym.make('HalfCheetah-v3')
-        max_ep_len = 1000
-        env_targets = [12000, 6000]
-        scale = 1000.
-    elif env_name == 'walker2d':
-        env = gym.make('Walker2d-v3')
-        max_ep_len = 1000
-        env_targets = [5000, 2500]
-        scale = 1000.
-    elif env_name == 'reacher2d':
-        from decision_transformer.envs.reacher_2d import Reacher2dEnv
-        env = Reacher2dEnv()
-        max_ep_len = 100
-        env_targets = [76, 40]
-        scale = 10.
+    if "lbforaging" in env_name:
+        env = gym.make("Foraging-8x8-2p-3f-v2")
+        max_ep_len = 10000
+        env_targets = torch.Tensor([2.0, 1.0, 0.5])
+        scale = 1.
     else:
         raise NotImplementedError
 
     if model_type == 'bc':
         env_targets = env_targets[:1]  # since BC ignores target, no need for different evaluations
 
-    state_dim = env.observation_space.shape[0]
-    act_dim = env.action_space.shape[0]
+    if "lbforaging" in env_name:
+        num_players = env.n_agents
+        state_dim = env.observation_space[0].shape[0] * num_players
+        act_dim = 1
+    else:
+        state_dim = env.observation_space.shape[0]
+        act_dim = env.action_space.shape[0]
 
     # load dataset
     dataset_path = f'gym/data/{env_name}-{dataset}-v2.pkl'
     with open(dataset_path, 'rb') as f:
         trajectories = pickle.load(f)
 
+    def get_action_mapping():
+        from itertools import product
+
+        avail_actions = list(range(len(env.action_set) + 1))
+        combinations = product(avail_actions, repeat=env.n_agents)
+        return {comb:i for i,comb in enumerate(combinations)}
+
+    actions_one_hot = get_action_mapping()
+    act_space = len(actions_one_hot)
+
+    def one_hot_encode_actions(actions):
+
+        actions = np.transpose(actions)
+        return torch.Tensor([actions_one_hot[tuple(x)] for x in actions]).type(torch.int64)
+        
     # save all path information into separate lists
     mode = variant.get('mode', 'normal')
     states, traj_lens, returns = [], [], []
     for path in trajectories:
+        path["rewards"] = path["rewards"].sum(axis=0)
+        path["actions"] = one_hot_encode_actions(path["actions"])
         if mode == 'delayed':  # delayed: all rewards moved to end of trajectory
             path['rewards'][-1] = path['rewards'].sum()
             path['rewards'][:-1] = 0.
-        states.append(path['observations'])
-        traj_lens.append(len(path['observations']))
+        states.append(path['states'])
+        traj_lens.append(len(path['states']))
         returns.append(path['rewards'].sum())
     traj_lens, returns = np.array(traj_lens), np.array(returns)
 
@@ -129,7 +136,7 @@ def experiment(
             si = random.randint(0, traj['rewards'].shape[0] - 1)
 
             # get sequences from dataset
-            s.append(traj['observations'][si:si + max_len].reshape(1, -1, state_dim))
+            s.append(traj['states'][si:si + max_len].reshape(1, -1, state_dim))
             a.append(traj['actions'][si:si + max_len].reshape(1, -1, act_dim))
             r.append(traj['rewards'][si:si + max_len].reshape(1, -1, 1))
             if 'terminals' in traj:
@@ -146,7 +153,7 @@ def experiment(
             tlen = s[-1].shape[1]
             s[-1] = np.concatenate([np.zeros((1, max_len - tlen, state_dim)), s[-1]], axis=1)
             s[-1] = (s[-1] - state_mean) / state_std
-            a[-1] = np.concatenate([np.ones((1, max_len - tlen, act_dim)) * -10., a[-1]], axis=1)
+            a[-1] = np.concatenate([np.ones((1, max_len - tlen, act_dim)) * 0., a[-1]], axis=1)
             r[-1] = np.concatenate([np.zeros((1, max_len - tlen, 1)), r[-1]], axis=1)
             d[-1] = np.concatenate([np.ones((1, max_len - tlen)) * 2, d[-1]], axis=1)
             rtg[-1] = np.concatenate([np.zeros((1, max_len - tlen, 1)), rtg[-1]], axis=1) / scale
@@ -209,6 +216,7 @@ def experiment(
         model = DecisionTransformer(
             state_dim=state_dim,
             act_dim=act_dim,
+            act_space=act_space,
             max_length=K,
             max_ep_len=max_ep_len,
             hidden_size=variant['embed_dim'],
@@ -269,7 +277,7 @@ def experiment(
         wandb.init(
             name=exp_prefix,
             group=group_name,
-            project='decision-transformer',
+            project='decision-transformer_multi',
             config=variant
         )
         # wandb.watch(model)  # wandb has some bug

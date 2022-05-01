@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+from itertools import product
 
 
 def evaluate_episode(
@@ -82,7 +83,8 @@ def evaluate_episode_rtg(
     state_mean = torch.from_numpy(state_mean).to(device=device)
     state_std = torch.from_numpy(state_std).to(device=device)
 
-    state = env.reset()
+    states = env.reset()
+    state = np.concatenate(states)
     if mode == 'noise':
         state = state + np.random.normal(0, 0.1, size=state.shape)
 
@@ -98,6 +100,10 @@ def evaluate_episode_rtg(
 
     sim_states = []
 
+    avail_actions = list(range(len(env.action_set) + 1))
+    combinations = product(avail_actions, repeat=env.n_agents)
+    enc_action_to_actions = {i:comb for i,comb in enumerate(combinations)}
+
     episode_return, episode_length = 0, 0
     for t in range(max_ep_len):
 
@@ -112,10 +118,13 @@ def evaluate_episode_rtg(
             target_return.to(dtype=torch.float32),
             timesteps.to(dtype=torch.long),
         )
-        actions[-1] = action
-        action = action.detach().cpu().numpy()
+        actions[-1] = float(action.argmax())
+        action = enc_action_to_actions[int(actions[-1])]
 
         state, reward, done, _ = env.step(action)
+        state = np.concatenate(state)
+        reward = sum(reward)
+        done = all(done)
 
         cur_state = torch.from_numpy(state).to(device=device).reshape(1, state_dim)
         states = torch.cat([states, cur_state], dim=0)

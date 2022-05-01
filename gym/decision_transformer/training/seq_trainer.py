@@ -2,7 +2,7 @@ import numpy as np
 import torch
 
 from decision_transformer.training.trainer import Trainer
-
+from torch.nn import functional as F
 
 class SequenceTrainer(Trainer):
 
@@ -14,14 +14,12 @@ class SequenceTrainer(Trainer):
             states, actions, rewards, rtg[:,:-1], timesteps, attention_mask=attention_mask,
         )
 
-        act_dim = action_preds.shape[2]
-        action_preds = action_preds.reshape(-1, act_dim)[attention_mask.reshape(-1) > 0]
+        act_dim = action_target.shape[2]
+        n_act = action_preds.shape[2]
+        action_preds = action_preds.reshape(-1, n_act)[attention_mask.unsqueeze(-1).repeat(1, 1, 1, 36).reshape(-1, n_act) > 0]
         action_target = action_target.reshape(-1, act_dim)[attention_mask.reshape(-1) > 0]
 
-        loss = self.loss_fn(
-            None, action_preds, None,
-            None, action_target, None,
-        )
+        loss = F.cross_entropy(action_preds.reshape(-1, n_act), action_target.reshape(-1).long())
 
         self.optimizer.zero_grad()
         loss.backward()
@@ -29,6 +27,6 @@ class SequenceTrainer(Trainer):
         self.optimizer.step()
 
         with torch.no_grad():
-            self.diagnostics['training/action_error'] = torch.mean((action_preds-action_target)**2).detach().cpu().item()
+            self.diagnostics['training/action_error'] = loss.detach().cpu().item()
 
         return loss.detach().cpu().item()

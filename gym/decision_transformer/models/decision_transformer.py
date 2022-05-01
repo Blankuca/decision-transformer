@@ -19,6 +19,7 @@ class DecisionTransformer(TrajectoryModel):
             state_dim,
             act_dim,
             hidden_size,
+            act_space,
             max_length=None,
             max_ep_len=4096,
             action_tanh=True,
@@ -27,6 +28,7 @@ class DecisionTransformer(TrajectoryModel):
         super().__init__(state_dim, act_dim, max_length=max_length)
 
         self.hidden_size = hidden_size
+        self.act_space = act_space
         config = transformers.GPT2Config(
             vocab_size=1,  # doesn't matter -- we don't use the vocab
             n_embd=hidden_size,
@@ -47,8 +49,9 @@ class DecisionTransformer(TrajectoryModel):
         # note: we don't predict states or returns for the paper
         self.predict_state = torch.nn.Linear(hidden_size, self.state_dim)
         self.predict_action = nn.Sequential(
-            *([nn.Linear(hidden_size, self.act_dim)] + ([nn.Tanh()] if action_tanh else []))
+            *([nn.Linear(hidden_size, self.act_space)] + ([nn.Tanh()] if action_tanh else []))
         )
+        self.softmax_action = torch.nn.Softmax(dim=1)
         self.predict_return = torch.nn.Linear(hidden_size, 1)
 
     def forward(self, states, actions, rewards, returns_to_go, timesteps, attention_mask=None):
@@ -97,8 +100,9 @@ class DecisionTransformer(TrajectoryModel):
         return_preds = self.predict_return(x[:,2])  # predict next return given state and action
         state_preds = self.predict_state(x[:,2])    # predict next state given state and action
         action_preds = self.predict_action(x[:,1])  # predict next action given state
+        action_logits = self.softmax_action(action_preds)
 
-        return state_preds, action_preds, return_preds
+        return state_preds, action_logits, return_preds
 
     def get_action(self, states, actions, rewards, returns_to_go, timesteps, **kwargs):
         # we don't care about the past rewards in this model

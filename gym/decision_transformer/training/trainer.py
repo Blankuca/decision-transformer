@@ -3,6 +3,8 @@ import torch
 
 import time
 
+from torch.nn import functional as F
+
 
 class Trainer:
 
@@ -67,10 +69,11 @@ class Trainer:
         )
 
         # note: currently indexing & masking is not fully correct
-        loss = self.loss_fn(
-            state_preds, action_preds, reward_preds,
-            state_target[:,1:], action_target, reward_target[:,1:],
-        )
+        #loss = self.loss_fn(
+        #    state_preds, action_preds, reward_preds,
+        #    state_target[:,1:], action_target, reward_target[:,1:],
+        #)
+        loss =  F.cross_entropy(action_preds.reshape(-1, action_preds.size(-1)), action_target.reshape(-1))
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
