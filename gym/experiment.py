@@ -39,7 +39,7 @@ def experiment(
     if "lbforaging" in env_name:
         env = gym.make("Foraging-8x8-2p-3f-v2")
         max_ep_len = 10000
-        env_targets = torch.Tensor([2.0, 1.0, 0.5])
+        env_targets = torch.Tensor([1.0, 0.5, 0.3])
         scale = 1.
     else:
         raise NotImplementedError
