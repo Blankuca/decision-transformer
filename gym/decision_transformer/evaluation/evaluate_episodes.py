@@ -93,22 +93,23 @@ def evaluate_episode_rtg(
 
     # we keep all the histories on the device
     # note that the latest action and reward will be "padding"
-    states = torch.from_numpy(state).reshape(1, 1, state_dim).to(device=device, dtype=torch.float32)
+    states = torch.from_numpy(state).reshape(1, state_dim).to(device=device, dtype=torch.float32)
     actions = torch.zeros((0, act_dim), device=device, dtype=torch.float32)
     rewards = torch.zeros(num_agents, 0, device=device, dtype=torch.float32)
 
     target_return = [1,1]
     ep_return = target_return
-    target_return = torch.tensor(ep_return, device=device, dtype=torch.float32).reshape(num_agents,1,1)
+    target_return = torch.tensor(ep_return, device=device, dtype=torch.float32).reshape(num_agents,1)
     timesteps = torch.tensor(0, device=device, dtype=torch.long).reshape(1, 1)
 
     sim_states = []
 
     avail_actions = list(range(len(env.action_set) + 1))
-    combinations = product(avail_actions, repeat=num_agents)
+    combinations = list(product(avail_actions, repeat=num_agents))
     enc_action_to_actions = {i:comb for i,comb in enumerate(combinations)}
+    actions_to_enc_actions = {comb:i for i,comb in enumerate(combinations)}
 
-    episode_return, episode_length = [0 for _ in range(num_agents)], 0
+    episode_return, episode_length = torch.zeros(num_agents, device=device, dtype=torch.float32), 0
     for t in range(max_ep_len):
 
         # add padding
@@ -123,32 +124,32 @@ def evaluate_episode_rtg(
             target_return.to(dtype=torch.float32),
             timesteps.to(dtype=torch.long),
         )
-        actions[-1] = float(action.argmax())
-        action = enc_action_to_actions[int(actions[-1])]
+        actions[-1] = actions_to_enc_actions[tuple(action.argmax(dim=1).tolist())]
+        action = action.argmax(dim=1).tolist()
 
         state, reward, done, _ = env.step(action)
         state = np.concatenate(state)
-        reward = sum(reward)
+        reward = torch.FloatTensor(reward)
         done = all(done)
 
         cur_state = torch.from_numpy(state).to(device=device).reshape(1, state_dim)
         states = torch.cat([states, cur_state], dim=0)
-        rewards[-1] = reward
+        rewards[:,-1] = reward
 
         if mode != 'delayed':
             pred_return = target_return[0,-1] - (reward/scale)
         else:
             pred_return = target_return[0,-1]
         target_return = torch.cat(
-            [target_return, pred_return.reshape(1, 1)], dim=1)
+            [target_return, pred_return.reshape(-1, 1)], dim=1)
         timesteps = torch.cat(
             [timesteps,
              torch.ones((1, 1), device=device, dtype=torch.long) * (t+1)], dim=1)
 
-        episode_return += reward
+        episode_return += episode_return.add(reward)
         episode_length += 1
 
-        if done:
+        if all(done):
             break
 
     return episode_return, episode_length

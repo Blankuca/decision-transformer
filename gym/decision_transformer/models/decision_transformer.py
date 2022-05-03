@@ -118,16 +118,17 @@ class DecisionTransformer(TrajectoryModel):
 
     def get_action(self, states, actions, rewards, returns_to_go, timesteps, **kwargs):
         # we don't care about the past rewards in this model
+        num_agents = returns_to_go.shape[0]
 
         states = states.reshape(1, -1, self.state_dim)
         actions = actions.reshape(1, -1, self.act_dim)
-        returns_to_go = returns_to_go.reshape(1, -1, 1)
+        returns_to_go = returns_to_go.reshape(num_agents, 1, -1, 1)
         timesteps = timesteps.reshape(1, -1)
 
         if self.max_length is not None:
             states = states[:,-self.max_length:]
             actions = actions[:,-self.max_length:]
-            returns_to_go = returns_to_go[:,-self.max_length:]
+            returns_to_go = returns_to_go[:,:,-self.max_length:]
             timesteps = timesteps[:,-self.max_length:]
 
             # pad all tokens to sequence length
@@ -141,8 +142,8 @@ class DecisionTransformer(TrajectoryModel):
                              device=actions.device), actions],
                 dim=1).to(dtype=torch.float32)
             returns_to_go = torch.cat(
-                [torch.zeros((returns_to_go.shape[0], self.max_length-returns_to_go.shape[1], 1), device=returns_to_go.device), returns_to_go],
-                dim=1).to(dtype=torch.float32)
+                [torch.zeros((returns_to_go.shape[0],returns_to_go.shape[1], self.max_length-returns_to_go.shape[2], 1), device=returns_to_go.device), returns_to_go],
+                dim=2).to(dtype=torch.float32)
             timesteps = torch.cat(
                 [torch.zeros((timesteps.shape[0], self.max_length-timesteps.shape[1]), device=timesteps.device), timesteps],
                 dim=1
@@ -153,4 +154,4 @@ class DecisionTransformer(TrajectoryModel):
         _, action_preds, return_preds = self.forward(
             states, actions, None, returns_to_go, timesteps, attention_mask=attention_mask, **kwargs)
 
-        return action_preds[0,-1]
+        return action_preds[:,0,-1]
