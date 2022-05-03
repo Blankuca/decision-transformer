@@ -35,9 +35,12 @@ class DecisionTransformer(TrajectoryModel):
             **kwargs
         )
 
+        self.num_players = 2
+
         # note: the only difference between this GPT2Model and the default Huggingface version
         # is that the positional embeddings are removed (since we'll add those ourselves)
-        self.transformer = GPT2Model(config)
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.transformers = [GPT2Model(config).to(device) for _ in range(self.num_players)]
 
         self.embed_timestep = nn.Embedding(max_ep_len, hidden_size)
         self.embed_return = torch.nn.Linear(1, hidden_size)
@@ -54,8 +57,10 @@ class DecisionTransformer(TrajectoryModel):
         self.softmax_action = torch.nn.Softmax(dim=1)
         self.predict_return = torch.nn.Linear(hidden_size, 1)
 
-    def forward(self, states, actions, rewards, returns_to_go, timesteps, attention_mask=None):
+    def forward(self, states, actions, rewards, returns_to_go, timesteps, attention_mask=None, cooperative=True):
 
+        if cooperative:
+            returns_to_go = torch.stack([returns_to_go.sum(axis=0)] * self.num_players, dim=0)            
         batch_size, seq_length = states.shape[0], states.shape[1]
 
         if attention_mask is None:
@@ -71,13 +76,16 @@ class DecisionTransformer(TrajectoryModel):
         # time embeddings are treated similar to positional embeddings
         state_embeddings = state_embeddings + time_embeddings
         action_embeddings = action_embeddings + time_embeddings
-        returns_embeddings = returns_embeddings + time_embeddings
+        returns_embeddings = returns_embeddings + torch.stack([time_embeddings] * self.num_players, dim = 0)
 
         # this makes the sequence look like (R_1, s_1, a_1, R_2, s_2, a_2, ...)
         # which works nice in an autoregressive sense since states predict actions
-        stacked_inputs = torch.stack(
-            (returns_embeddings, state_embeddings, action_embeddings), dim=1
-        ).permute(0, 2, 1, 3).reshape(batch_size, 3*seq_length, self.hidden_size)
+        stacked_inputs = torch.stack([
+            torch.stack(
+                (returns_embeddings[player], state_embeddings, action_embeddings), dim=1
+            ).permute(0, 2, 1, 3).reshape(batch_size, 3*seq_length, self.hidden_size)
+        for player in range(self.num_players)])
+
         stacked_inputs = self.embed_ln(stacked_inputs)
 
         # to make the attention mask fit the stacked inputs, have to stack it as well
@@ -86,20 +94,24 @@ class DecisionTransformer(TrajectoryModel):
         ).permute(0, 2, 1).reshape(batch_size, 3*seq_length)
 
         # we feed in the input embeddings (not word indices as in NLP) to the model
-        transformer_outputs = self.transformer(
-            inputs_embeds=stacked_inputs,
-            attention_mask=stacked_attention_mask,
-        )
-        x = transformer_outputs['last_hidden_state']
+        transformer_outputs = [
+            self.transformers[player](
+                inputs_embeds=stacked_inputs[player],
+                attention_mask=stacked_attention_mask,
+            )
+        for player in range(self.num_players)]
+
+        x = [transformer_outputs_player['last_hidden_state'] for transformer_outputs_player in transformer_outputs]
 
         # reshape x so that the second dimension corresponds to the original
         # returns (0), states (1), or actions (2); i.e. x[:,1,t] is the token for s_t
-        x = x.reshape(batch_size, seq_length, 3, self.hidden_size).permute(0, 2, 1, 3)
+        x = [x_player.reshape(batch_size, seq_length, 3, self.hidden_size).permute(0, 2, 1, 3) for x_player in x]
 
         # get predictions
-        return_preds = self.predict_return(x[:,2])  # predict next return given state and action
-        state_preds = self.predict_state(x[:,2])    # predict next state given state and action
-        action_preds = self.predict_action(x[:,1])  # predict next action given state
+        return_preds = torch.stack([self.predict_return(x_player[:,2]) for x_player in x])  # predict next return given state and action
+        state_preds =  torch.stack([self.predict_state(x_player[:,2]) for x_player in x])    # predict next state given state and action
+        action_preds = torch.stack([self.predict_action(x_player[:,1]) for x_player in x])  # predict next action given state
+
         action_logits = self.softmax_action(action_preds)
 
         return state_preds, action_logits, return_preds

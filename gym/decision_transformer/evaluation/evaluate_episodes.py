@@ -23,16 +23,17 @@ def evaluate_episode(
     state_std = torch.from_numpy(state_std).to(device=device)
 
     state = env.reset()
+    num_players = env.n_agents
 
     # we keep all the histories on the device
     # note that the latest action and reward will be "padding"
     states = torch.from_numpy(state).reshape(1, state_dim).to(device=device, dtype=torch.float32)
     actions = torch.zeros((0, act_dim), device=device, dtype=torch.float32)
-    rewards = torch.zeros(0, device=device, dtype=torch.float32)
+    rewards = torch.stack([torch.zeros(0, device=device, dtype=torch.float32) for _ in range(num_players)])
     target_return = torch.tensor(target_return, device=device, dtype=torch.float32)
     sim_states = []
 
-    episode_return, episode_length = 0, 0
+    episode_return, episode_length = np.zeros(num_players), 0
     for t in range(max_ep_len):
 
         # add padding
@@ -80,6 +81,8 @@ def evaluate_episode_rtg(
     model.eval()
     model.to(device=device)
 
+    num_agents = env.n_agents
+
     state_mean = torch.from_numpy(state_mean).to(device=device)
     state_std = torch.from_numpy(state_std).to(device=device)
 
@@ -90,26 +93,28 @@ def evaluate_episode_rtg(
 
     # we keep all the histories on the device
     # note that the latest action and reward will be "padding"
-    states = torch.from_numpy(state).reshape(1, state_dim).to(device=device, dtype=torch.float32)
-    actions = torch.zeros((0, act_dim), device=device, dtype=torch.float32)
-    rewards = torch.zeros(0, device=device, dtype=torch.float32)
+    states = torch.from_numpy(state).reshape(1, 1, state_dim).to(device=device, dtype=torch.float32)
+    actions = torch.zeros((1, 0, act_dim), device=device, dtype=torch.float32)
+    rewards = torch.zeros(num_agents,1, 0, device=device, dtype=torch.float32)
 
+    target_return = [1,1]
     ep_return = target_return
-    target_return = torch.tensor(ep_return, device=device, dtype=torch.float32).reshape(1, 1)
-    timesteps = torch.tensor(0, device=device, dtype=torch.long).reshape(1, 1)
+    target_return = torch.tensor(ep_return, device=device, dtype=torch.float32).reshape(num_agents,1,1)
+    timesteps = torch.tensor(0, device=device, dtype=torch.long).reshape(1, 1, 1)
 
     sim_states = []
 
     avail_actions = list(range(len(env.action_set) + 1))
-    combinations = product(avail_actions, repeat=env.n_agents)
+    combinations = product(avail_actions, repeat=num_agents)
     enc_action_to_actions = {i:comb for i,comb in enumerate(combinations)}
 
-    episode_return, episode_length = 0, 0
+    episode_return, episode_length = [0 for _ in range(num_agents)], 0
     for t in range(max_ep_len):
 
         # add padding
         actions = torch.cat([actions, torch.zeros((1, act_dim), device=device)], dim=0)
-        rewards = torch.cat([rewards, torch.zeros(1, device=device)])
+        rewards = torch.cat([rewards, torch.zeros(num_agents,1, device=device)], dim=1)
+
 
         action = model.get_action(
             (states.to(dtype=torch.float32) - state_mean) / state_std,

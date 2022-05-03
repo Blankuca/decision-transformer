@@ -65,29 +65,29 @@ def experiment(
 
         avail_actions = list(range(len(env.action_set) + 1))
         combinations = product(avail_actions, repeat=env.n_agents)
-        return {comb:i for i,comb in enumerate(combinations)}
+        return {comb:i for i,comb in enumerate(combinations)}, {i:comb for i,comb in enumerate(combinations)}
 
-    actions_one_hot = get_action_mapping()
-    act_space = len(actions_one_hot)
+    actions_to_one_hot, one_hot_to_actions = get_action_mapping()
+    act_space = len(actions_to_one_hot)
 
     def one_hot_encode_actions(actions):
 
         actions = np.transpose(actions)
-        return torch.Tensor([actions_one_hot[tuple(x)] for x in actions]).type(torch.int64)
+        return torch.Tensor([actions_to_one_hot[tuple(x)] for x in actions]).type(torch.int64)
         
     # save all path information into separate lists
     mode = variant.get('mode', 'normal')
     states, traj_lens, returns = [], [], []
     for path in trajectories:
-        path["rewards"] = path["rewards"].sum(axis=0)
-        path["actions"] = one_hot_encode_actions(path["actions"])
+        #path["rewards"] = path["rewards"].sum(axis=0)
+        path["actions_one_hot"] = one_hot_encode_actions(path["actions"])
         if mode == 'delayed':  # delayed: all rewards moved to end of trajectory
             path['rewards'][-1] = path['rewards'].sum()
             path['rewards'][:-1] = 0.
         states.append(path['states'])
         traj_lens.append(len(path['states']))
-        returns.append(path['rewards'].sum())
-    traj_lens, returns = np.array(traj_lens), np.array(returns)
+        returns.append(path['rewards'].sum(axis=1))
+    traj_lens, returns = np.array(traj_lens), np.transpose(returns)
 
     # used for input normalization
     states = np.concatenate(states, axis=0)
@@ -109,7 +109,7 @@ def experiment(
 
     # only train on top pct_traj trajectories (for %BC experiment)
     num_timesteps = max(int(pct_traj*num_timesteps), 1)
-    sorted_inds = np.argsort(returns)  # lowest to highest
+    sorted_inds = np.argsort(np.array(returns).sum(axis=0))
     num_trajectories = 1
     timesteps = traj_lens[sorted_inds[-1]]
     ind = len(trajectories) - 2
@@ -130,45 +130,61 @@ def experiment(
             p=p_sample,  # reweights so we sample according to timesteps
         )
 
-        s, a, r, d, rtg, timesteps, mask = [], [], [], [], [], [], []
+        s, a, d, timesteps, mask = [], [], [], [], []
+        r, rtg, A = [[] for _ in range(num_players)], [[] for _ in range(num_players)], [[] for _ in range(num_players)]
         for i in range(batch_size):
             traj = trajectories[int(sorted_inds[batch_inds[i]])]
             si = random.randint(0, traj['rewards'].shape[0] - 1)
 
             # get sequences from dataset
             s.append(traj['states'][si:si + max_len].reshape(1, -1, state_dim))
-            a.append(traj['actions'][si:si + max_len].reshape(1, -1, act_dim))
-            r.append(traj['rewards'][si:si + max_len].reshape(1, -1, 1))
+            a.append(traj['actions_one_hot'][si:si + max_len].reshape(1, -1, act_dim))
             if 'terminals' in traj:
                 d.append(traj['terminals'][si:si + max_len].reshape(1, -1))
             else:
                 d.append(traj['dones'][si:si + max_len].reshape(1, -1))
             timesteps.append(np.arange(si, si + s[-1].shape[1]).reshape(1, -1))
             timesteps[-1][timesteps[-1] >= max_ep_len] = max_ep_len-1  # padding cutoff
-            rtg.append(discount_cumsum(traj['rewards'][si:], gamma=1.)[:s[-1].shape[1] + 1].reshape(1, -1, 1))
-            if rtg[-1].shape[1] <= s[-1].shape[1]:
-                rtg[-1] = np.concatenate([rtg[-1], np.zeros((1, 1, 1))], axis=1)
+
+            for player in range(num_players):
+                r[player].append(traj['rewards'][player][si:si + max_len].reshape(1, -1, 1))
+                rtg[player].append(discount_cumsum(traj['rewards'][player][si:], gamma=1.)[:s[-1].shape[1] + 1].reshape(1, -1, 1))
+                if rtg[player][-1].shape[1] <= s[-1].shape[1]:
+                    rtg[player][-1] = np.concatenate([rtg[player][-1], np.zeros((1, 1, 1))], axis=1)
+                A[player].append(traj['actions'][player][si:si + max_len].reshape(1, -1, act_dim))
+
 
             # padding and state + reward normalization
             tlen = s[-1].shape[1]
             s[-1] = np.concatenate([np.zeros((1, max_len - tlen, state_dim)), s[-1]], axis=1)
             s[-1] = (s[-1] - state_mean) / state_std
             a[-1] = np.concatenate([np.ones((1, max_len - tlen, act_dim)) * 0., a[-1]], axis=1)
-            r[-1] = np.concatenate([np.zeros((1, max_len - tlen, 1)), r[-1]], axis=1)
             d[-1] = np.concatenate([np.ones((1, max_len - tlen)) * 2, d[-1]], axis=1)
-            rtg[-1] = np.concatenate([np.zeros((1, max_len - tlen, 1)), rtg[-1]], axis=1) / scale
             timesteps[-1] = np.concatenate([np.zeros((1, max_len - tlen)), timesteps[-1]], axis=1)
             mask.append(np.concatenate([np.zeros((1, max_len - tlen)), np.ones((1, tlen))], axis=1))
 
+            for player in range(num_players):
+                r[player][-1] = np.concatenate([np.zeros((1, max_len - tlen, 1)), r[player][-1]], axis=1)
+                rtg[player][-1] = np.concatenate([np.zeros((1, max_len - tlen, 1)), rtg[player][-1]], axis=1) / scale
+                A[player][-1] = np.concatenate([np.ones((1, max_len - tlen, act_dim)) * 0., A[player][-1]], axis=1)
+
         s = torch.from_numpy(np.concatenate(s, axis=0)).to(dtype=torch.float32, device=device)
         a = torch.from_numpy(np.concatenate(a, axis=0)).to(dtype=torch.float32, device=device)
-        r = torch.from_numpy(np.concatenate(r, axis=0)).to(dtype=torch.float32, device=device)
         d = torch.from_numpy(np.concatenate(d, axis=0)).to(dtype=torch.long, device=device)
-        rtg = torch.from_numpy(np.concatenate(rtg, axis=0)).to(dtype=torch.float32, device=device)
         timesteps = torch.from_numpy(np.concatenate(timesteps, axis=0)).to(dtype=torch.long, device=device)
         mask = torch.from_numpy(np.concatenate(mask, axis=0)).to(device=device)
 
-        return s, a, r, d, rtg, timesteps, mask
+        for player in range(num_players):
+            r[player] = torch.from_numpy(np.concatenate(r[player], axis=0)).to(dtype=torch.float32, device=device)
+            rtg[player] = torch.from_numpy(np.concatenate(rtg[player], axis=0)).to(dtype=torch.float32, device=device)
+            A[player] = torch.from_numpy(np.concatenate(A[player], axis=0)).to(dtype=torch.float32, device=device)
+
+
+        r = torch.stack(r)
+        rtg = torch.stack(rtg)
+        A = torch.stack(A)
+
+        return s, a, r, d, rtg, timesteps, mask, A
 
     def eval_episodes(target_rew):
         def fn(model):
@@ -216,7 +232,7 @@ def experiment(
         model = DecisionTransformer(
             state_dim=state_dim,
             act_dim=act_dim,
-            act_space=act_space,
+            act_space=len(env.action_set) + 1,
             max_length=K,
             max_ep_len=max_ep_len,
             hidden_size=variant['embed_dim'],
