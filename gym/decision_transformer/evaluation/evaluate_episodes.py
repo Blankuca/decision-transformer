@@ -94,13 +94,13 @@ def evaluate_episode_rtg(
     # we keep all the histories on the device
     # note that the latest action and reward will be "padding"
     states = torch.from_numpy(state).reshape(1, 1, state_dim).to(device=device, dtype=torch.float32)
-    actions = torch.zeros((1, 0, act_dim), device=device, dtype=torch.float32)
-    rewards = torch.zeros(num_agents,1, 0, device=device, dtype=torch.float32)
+    actions = torch.zeros((0, act_dim), device=device, dtype=torch.float32)
+    rewards = torch.zeros(num_agents, 0, device=device, dtype=torch.float32)
 
     target_return = [1,1]
     ep_return = target_return
     target_return = torch.tensor(ep_return, device=device, dtype=torch.float32).reshape(num_agents,1,1)
-    timesteps = torch.tensor(0, device=device, dtype=torch.long).reshape(1, 1, 1)
+    timesteps = torch.tensor(0, device=device, dtype=torch.long).reshape(1, 1)
 
     sim_states = []
 
