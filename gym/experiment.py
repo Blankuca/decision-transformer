@@ -16,6 +16,14 @@ from decision_transformer.training.seq_trainer import SequenceTrainer
 
 import lbforaging
 
+import csv
+
+# open the file in the write mode
+f = open('returns_competitive.csv', 'w')
+
+# create the csv writer
+writer = csv.writer(f)
+
 def discount_cumsum(x, gamma):
     discount_cumsum = np.zeros_like(x)
     discount_cumsum[-1] = x[-1]
@@ -39,7 +47,7 @@ def experiment(
     if "lbforaging" in env_name:
         env = gym.make("Foraging-8x8-2p-3f-v2")
         max_ep_len = 10000
-        env_targets = torch.Tensor([2.0, 1.0, 0.5])
+        env_targets = torch.Tensor([[1,1], [0.5,0.5], [0.1,0.1]])
         scale = 1.
     else:
         raise NotImplementedError
@@ -69,6 +77,8 @@ def experiment(
 
     actions_to_one_hot, one_hot_to_actions = get_action_mapping()
     act_space = len(actions_to_one_hot)
+
+    writer.writerow([f"agent_{i}" for i in range(num_players)])
 
     def one_hot_encode_actions(actions):
 
@@ -220,9 +230,24 @@ def experiment(
                         )
                 returns.append(ret)
                 lengths.append(length)
+                """
+                    wandb.plot.line_series(
+                    xs=[iter],
+                    ys=torch.stack(returns).mean(dim=0).reshape(-1,1).tolist(),
+                    keys=[f"Agent {n}" for n in range(num_players)],
+                    title="Mean return"
+                    ),
+                                    wandb.plot.line_series(
+                    xs=[iter],
+                    ys=torch.stack(returns).std(dim=0).reshape(-1,1).tolist(),
+                    keys=[f"Agent {n}" for n in range(num_players)],
+                    title="Std return"
+                    ),
+                """
+            writer.writerow(torch.stack(returns).mean(dim=0).tolist())
             return {
-                f'target_{target_rew}_return_mean': np.mean(returns),
-                f'target_{target_rew}_return_std': np.std(returns),
+                f'target_{target_rew}_return_mean': torch.stack(returns).mean(dim=0).reshape(-1,1).tolist(),   
+                f'target_{target_rew}_return_std': torch.stack(returns).std(dim=0).reshape(-1,1).tolist(),
                 f'target_{target_rew}_length_mean': np.mean(lengths),
                 f'target_{target_rew}_length_std': np.std(lengths),
             }
@@ -232,6 +257,7 @@ def experiment(
         model = DecisionTransformer(
             state_dim=state_dim,
             act_dim=act_dim,
+            num_players = num_players,
             act_space=len(env.action_set) + 1,
             max_length=K,
             max_ep_len=max_ep_len,
@@ -243,6 +269,7 @@ def experiment(
             n_positions=1024,
             resid_pdrop=variant['dropout'],
             attn_pdrop=variant['dropout'],
+            cooperative = variant["is_cooperative"]
         )
     elif model_type == 'bc':
         model = MLPBCModel(
@@ -303,7 +330,6 @@ def experiment(
         if log_to_wandb:
             wandb.log(outputs)
 
-
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--env', type=str, default='hopper')
@@ -326,7 +352,12 @@ if __name__ == '__main__':
     parser.add_argument('--num_steps_per_iter', type=int, default=10000)
     parser.add_argument('--device', type=str, default='cuda')
     parser.add_argument('--log_to_wandb', '-w', type=bool, default=False)
+    parser.add_argument('--is_cooperative', type=bool, default=True)
     
     args = parser.parse_args()
 
     experiment('gym-experiment', variant=vars(args))
+
+    # close the file
+    f.close()
+

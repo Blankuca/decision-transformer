@@ -97,9 +97,8 @@ def evaluate_episode_rtg(
     actions = torch.zeros((0, act_dim), device=device, dtype=torch.float32)
     rewards = torch.zeros(num_agents, 0, device=device, dtype=torch.float32)
 
-    target_return = [1,1]
     ep_return = target_return
-    target_return = torch.tensor(ep_return, device=device, dtype=torch.float32).reshape(num_agents,1)
+    target_return = torch.tensor(ep_return, device=device, dtype=torch.float32).reshape(num_agents,1, 1)
     timesteps = torch.tensor(0, device=device, dtype=torch.long).reshape(1, 1)
 
     sim_states = []
@@ -129,7 +128,7 @@ def evaluate_episode_rtg(
 
         state, reward, done, _ = env.step(action)
         state = np.concatenate(state)
-        reward = torch.FloatTensor(reward)
+        reward = torch.FloatTensor(reward).to(device=device)
         done = all(done)
 
         cur_state = torch.from_numpy(state).to(device=device).reshape(1, state_dim)
@@ -137,19 +136,19 @@ def evaluate_episode_rtg(
         rewards[:,-1] = reward
 
         if mode != 'delayed':
-            pred_return = target_return[0,-1] - (reward/scale)
+            pred_return = target_return[:,0,-1].sub(reward/scale)
         else:
-            pred_return = target_return[0,-1]
+            pred_return = target_return[:,0,-1]
         target_return = torch.cat(
-            [target_return, pred_return.reshape(-1, 1)], dim=1)
+            [target_return, pred_return.reshape(-1, 1, 1)], dim=1)
         timesteps = torch.cat(
             [timesteps,
              torch.ones((1, 1), device=device, dtype=torch.long) * (t+1)], dim=1)
 
-        episode_return += episode_return.add(reward)
+        episode_return = episode_return.add(reward)
         episode_length += 1
 
-        if all(done):
+        if done:
             break
 
     return episode_return, episode_length
