@@ -63,8 +63,7 @@ class DecisionTransformer(TrajectoryModel):
     def forward(self, states, actions, rewards, returns_to_go, timesteps, attention_mask=None):
 
         if self.cooperative:
-            #returns_to_go = torch.stack([returns_to_go.sum(axis=0)] * self.num_players, dim=0)    
-            returns_to_go = torch.stack([returns_to_go.sum(axis=0), returns_to_go[1].sub(returns_to_go[~1].sum(axis=-1).unsqueeze(-1))])
+            returns_to_go = torch.stack([returns_to_go.sum(axis=0)] * self.num_players, dim=0)    
         else:
             #returns_to_go = torch.stack([returns_to_go[player].sub(returns_to_go[~player].sum(axis=-1).unsqueeze(-1)) for player in range(self.num_players)])
             returns_to_go = torch.stack([returns_to_go.sum(axis=0), returns_to_go[1].sub(returns_to_go[~1].sum(axis=-1).unsqueeze(-1))])

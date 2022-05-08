@@ -1,3 +1,4 @@
+from tkinter import W
 import gym
 import numpy as np
 import torch
@@ -17,12 +18,6 @@ from decision_transformer.training.seq_trainer import SequenceTrainer
 import lbforaging
 
 import csv
-
-# open the file in the write mode
-f = open('returns_competitive.csv', 'w')
-
-# create the csv writer
-writer = csv.writer(f)
 
 def discount_cumsum(x, gamma):
     discount_cumsum = np.zeros_like(x)
@@ -47,11 +42,11 @@ def experiment(
     if "lbforaging" in env_name:
         env = gym.make("Foraging-8x8-2p-3f-v2")
         max_ep_len = 10000
-        env_targets = torch.Tensor([[1,1], [0.5,0.5], [0.1,0.1]])
+        env_targets = torch.Tensor([[1,1], [0.5,0.5]])
         scale = 1.
     else:
         raise NotImplementedError
-
+        
     if model_type == 'bc':
         env_targets = env_targets[:1]  # since BC ignores target, no need for different evaluations
 
@@ -62,6 +57,15 @@ def experiment(
     else:
         state_dim = env.observation_space.shape[0]
         act_dim = env.action_space.shape[0]
+
+    files = {}
+    writers = {}
+    for env_target in env_targets:
+        e = tuple(env_target.tolist())
+        files[e] = open(f'returns_cooperative_{e}.csv', 'w') if variant["is_cooperative"] else open(f'returns_competitive_{e}.csv', 'w')
+        writers[e] = csv.writer(files[e])
+        writers[e].writerow([f"agent_{i}" for i in range(num_players)])
+        files[e].close()
 
     # load dataset
     dataset_path = f'gym/data/{env_name}-{dataset}-v2.pkl'
@@ -77,8 +81,6 @@ def experiment(
 
     actions_to_one_hot, one_hot_to_actions = get_action_mapping()
     act_space = len(actions_to_one_hot)
-
-    writer.writerow([f"agent_{i}" for i in range(num_players)])
 
     def one_hot_encode_actions(actions):
 
@@ -197,6 +199,7 @@ def experiment(
         return s, a, r, d, rtg, timesteps, mask, A
 
     def eval_episodes(target_rew):
+
         def fn(model):
             returns, lengths = [], []
             for _ in range(num_eval_episodes):
@@ -243,8 +246,12 @@ def experiment(
                     keys=[f"Agent {n}" for n in range(num_players)],
                     title="Std return"
                     ),
-                """
+                """     
+            e = tuple(target_rew.tolist())
+            file = open(f'returns_cooperative_{e}.csv', 'a') if variant["is_cooperative"] else open(f'returns_competitive_{e}.csv', 'a')
+            writer = csv.writer(file)
             writer.writerow(torch.stack(returns).mean(dim=0).tolist())
+            file.close()
             return {
                 f'target_{target_rew}_return_mean': torch.stack(returns).mean(dim=0).reshape(-1,1).tolist(),   
                 f'target_{target_rew}_return_std': torch.stack(returns).std(dim=0).reshape(-1,1).tolist(),
@@ -330,6 +337,9 @@ def experiment(
         if log_to_wandb:
             wandb.log(outputs)
 
+    #for file in files.values():
+    #    file.close()
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--env', type=str, default='hopper')
@@ -352,12 +362,8 @@ if __name__ == '__main__':
     parser.add_argument('--num_steps_per_iter', type=int, default=10000)
     parser.add_argument('--device', type=str, default='cuda')
     parser.add_argument('--log_to_wandb', '-w', type=bool, default=False)
-    parser.add_argument('--is_cooperative', type=bool, default=True)
+    parser.add_argument('--is_cooperative', type=bool, default=False)
     
     args = parser.parse_args()
 
     experiment('gym-experiment', variant=vars(args))
-
-    # close the file
-    f.close()
-
