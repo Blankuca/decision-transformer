@@ -24,7 +24,7 @@ class DecisionTransformer(TrajectoryModel):
             max_length=None,
             max_ep_len=4096,
             action_tanh=True,
-            cooperative=True,
+            behavior="Bla bla",
             **kwargs
     ):
         super().__init__(state_dim, act_dim, max_length=max_length)
@@ -38,7 +38,7 @@ class DecisionTransformer(TrajectoryModel):
         )
 
         self.num_players = num_players
-        self.cooperative = cooperative
+        self.behavior = behavior
 
         # note: the only difference between this GPT2Model and the default Huggingface version
         # is that the positional embeddings are removed (since we'll add those ourselves)
@@ -62,11 +62,14 @@ class DecisionTransformer(TrajectoryModel):
 
     def forward(self, states, actions, rewards, returns_to_go, timesteps, attention_mask=None):
 
-        if self.cooperative:
-            returns_to_go = torch.stack([returns_to_go.sum(axis=0)] * self.num_players, dim=0)    
-        else:
-            #returns_to_go = torch.stack([returns_to_go[player].sub(returns_to_go[~player].sum(axis=-1).unsqueeze(-1)) for player in range(self.num_players)])
+        if self.behavior == 'cooperative':
+            returns_to_go = torch.stack([returns_to_go.sum(axis=0)] * self.num_players, dim=0)   
+        elif self.behavior == 'competitive': 
+            returns_to_go = torch.stack([returns_to_go[player].sub(returns_to_go[~player].sum(axis=-1).unsqueeze(-1)) for player in range(self.num_players)])
+        elif self.behavior == 'mixed':
             returns_to_go = torch.stack([returns_to_go.sum(axis=0), returns_to_go[1].sub(returns_to_go[~1].sum(axis=-1).unsqueeze(-1))])
+        else:
+            raise NotImplementedError(self.behavior)
         batch_size, seq_length = states.shape[0], states.shape[1]
 
         if attention_mask is None:

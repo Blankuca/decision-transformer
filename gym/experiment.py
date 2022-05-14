@@ -36,7 +36,7 @@ def experiment(
 
     env_name, dataset = variant['env'], variant['dataset']
     model_type = variant['model_type']
-    group_name = f'{exp_prefix}-{env_name}-{dataset}'
+    group_name = f'{exp_prefix}-{env_name}-{dataset}-{variant["behavior"]}'
     exp_prefix = f'{group_name}-{random.randint(int(1e5), int(1e6) - 1)}'
 
     if "lbforaging" in env_name:
@@ -58,14 +58,16 @@ def experiment(
         state_dim = env.observation_space.shape[0]
         act_dim = env.action_space.shape[0]
 
+    """
     files = {}
     writers = {}
     for env_target in env_targets:
         e = tuple(env_target.tolist())
-        files[e] = open(f'returns_cooperative_{e}.csv', 'w') if variant["is_cooperative"] else open(f'returns_competitive_{e}.csv', 'w')
+        files[e] = open(f'returns_cooperative_{variant["behavior"]}.csv', 'w')
         writers[e] = csv.writer(files[e])
         writers[e].writerow([f"agent_{i}" for i in range(num_players)])
         files[e].close()
+    """
 
     # load dataset
     dataset_path = f'gym/data/{env_name}-{dataset}-v2.pkl'
@@ -233,28 +235,18 @@ def experiment(
                         )
                 returns.append(ret)
                 lengths.append(length)
-                """
-                    wandb.plot.line_series(
-                    xs=[iter],
-                    ys=torch.stack(returns).mean(dim=0).reshape(-1,1).tolist(),
-                    keys=[f"Agent {n}" for n in range(num_players)],
-                    title="Mean return"
-                    ),
-                                    wandb.plot.line_series(
-                    xs=[iter],
-                    ys=torch.stack(returns).std(dim=0).reshape(-1,1).tolist(),
-                    keys=[f"Agent {n}" for n in range(num_players)],
-                    title="Std return"
-                    ),
-                """     
+            """
             e = tuple(target_rew.tolist())
-            file = open(f'returns_cooperative_{e}.csv', 'a') if variant["is_cooperative"] else open(f'returns_competitive_{e}.csv', 'a')
+            file = open(f'returns_cooperative_{variant["behavior"]}.csv', 'a')
             writer = csv.writer(file)
             writer.writerow(torch.stack(returns).mean(dim=0).tolist())
             file.close()
+            """
             return {
-                f'target_{target_rew}_return_mean': torch.stack(returns).mean(dim=0).reshape(-1,1).tolist(),   
-                f'target_{target_rew}_return_std': torch.stack(returns).std(dim=0).reshape(-1,1).tolist(),
+                f'target_{target_rew}_return_mean_agent1': torch.stack(returns).mean(dim=0).tolist()[0],   
+                f'target_{target_rew}_return_std_agent1': torch.stack(returns).std(dim=0).tolist()[0],
+                f'target_{target_rew}_return_mean_agent2': torch.stack(returns).mean(dim=0).tolist()[1],   
+                f'target_{target_rew}_return_std_agent2': torch.stack(returns).std(dim=0).tolist()[1],
                 f'target_{target_rew}_length_mean': np.mean(lengths),
                 f'target_{target_rew}_length_std': np.std(lengths),
             }
@@ -276,7 +268,7 @@ def experiment(
             n_positions=1024,
             resid_pdrop=variant['dropout'],
             attn_pdrop=variant['dropout'],
-            cooperative = variant["is_cooperative"]
+            behavior = variant["behavior"]
         )
     elif model_type == 'bc':
         model = MLPBCModel(
@@ -337,6 +329,7 @@ def experiment(
         if log_to_wandb:
             wandb.log(outputs)
 
+    torch.save(model, f"dataset/saved_models/model_{variant['behavior']}.pt")
     #for file in files.values():
     #    file.close()
 
@@ -362,7 +355,7 @@ if __name__ == '__main__':
     parser.add_argument('--num_steps_per_iter', type=int, default=10000)
     parser.add_argument('--device', type=str, default='cuda')
     parser.add_argument('--log_to_wandb', '-w', type=bool, default=False)
-    parser.add_argument('--is_cooperative', type=bool, default=False)
+    parser.add_argument('--behavior', type=str, default='cooperative')
     
     args = parser.parse_args()
 
