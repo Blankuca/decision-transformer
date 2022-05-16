@@ -319,7 +319,7 @@ def experiment(
         wandb.init(
             name=exp_prefix,
             group=group_name,
-            project='decision-transformer_multi',
+            project='multi-agent_decision-transformer',
             config=variant
         )
         # wandb.watch(model)  # wandb has some bug
