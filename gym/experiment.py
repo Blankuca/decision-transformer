@@ -36,11 +36,13 @@ def experiment(
 
     env_name, dataset = variant['env'], variant['dataset']
     model_type = variant['model_type']
-    group_name = f'{exp_prefix}-{env_name}-{dataset}-{variant["behavior"]}'
-    exp_prefix = f'{group_name}-{random.randint(int(1e5), int(1e6) - 1)}'
+    group_name = f'{exp_prefix}-{env_name}'
+    random_num = random.randint(int(1e5), int(1e6) - 1)
+    exp_prefix = f'{variant["behavior"]}-{random_num}'
 
     if "lbforaging" in env_name:
-        env = gym.make("Foraging-8x8-2p-3f-v2")
+        #env = gym.make(env_name)
+        env = gym.make("lbforaging:Foraging-8x8-2p-3f-v2")
         max_ep_len = 10000
         env_targets = torch.Tensor([[1,1], [0.5,0.5]])
         scale = 1.
@@ -70,7 +72,7 @@ def experiment(
     """
 
     # load dataset
-    dataset_path = f'gym/data/{env_name}-{dataset}-v2.pkl'
+    dataset_path = f'gym/data/{env_name}.pkl'
     with open(dataset_path, 'rb') as f:
         trajectories = pickle.load(f)
 
@@ -329,7 +331,7 @@ def experiment(
         if log_to_wandb:
             wandb.log(outputs)
 
-    torch.save(model, f"dataset/saved_models/model_{variant['behavior']}.pt")
+    torch.save(model, f"../dataset/saved_models/model_{variant['behavior']}_{random_num}.pt")
     #for file in files.values():
     #    file.close()
 
