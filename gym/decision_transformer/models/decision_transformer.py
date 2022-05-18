@@ -24,7 +24,7 @@ class DecisionTransformer(TrajectoryModel):
             max_length=None,
             max_ep_len=4096,
             action_tanh=True,
-            behavior="Bla bla",
+            behavior="",
             **kwargs
     ):
         super().__init__(state_dim, act_dim, max_length=max_length)

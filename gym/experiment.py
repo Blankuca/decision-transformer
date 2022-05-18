@@ -41,10 +41,10 @@ def experiment(
     exp_prefix = f'{variant["behavior"]}-{random_num}'
 
     if "lbforaging" in env_name:
-        #env = gym.make(env_name)
-        env = gym.make("lbforaging:Foraging-8x8-2p-3f-v2")
+        env = gym.make(env_name)
+        #env = gym.make("Foraging-8x8-2p-3f-v2")
         max_ep_len = 10000
-        env_targets = torch.Tensor([[1,1], [0.5,0.5]])
+        env_targets = torch.Tensor([[1,1]])
         scale = 1.
     else:
         raise NotImplementedError
@@ -65,7 +65,7 @@ def experiment(
     writers = {}
     for env_target in env_targets:
         e = tuple(env_target.tolist())
-        files[e] = open(f'returns_cooperative_{variant["behavior"]}.csv', 'w')
+        files[e] = open(f'returns_{variant["behavior"]}.csv', 'w')
         writers[e] = csv.writer(files[e])
         writers[e].writerow([f"agent_{i}" for i in range(num_players)])
         files[e].close()
@@ -239,7 +239,7 @@ def experiment(
                 lengths.append(length)
             """
             e = tuple(target_rew.tolist())
-            file = open(f'returns_cooperative_{variant["behavior"]}.csv', 'a')
+            file = open(f'returns_{variant["behavior"]}.csv', 'a')
             writer = csv.writer(file)
             writer.writerow(torch.stack(returns).mean(dim=0).tolist())
             file.close()
@@ -357,7 +357,7 @@ if __name__ == '__main__':
     parser.add_argument('--num_steps_per_iter', type=int, default=10000)
     parser.add_argument('--device', type=str, default='cuda')
     parser.add_argument('--log_to_wandb', '-w', type=bool, default=False)
-    parser.add_argument('--behavior', type=str, default='cooperative')
+    parser.add_argument('--behavior', type=str, default='')
     
     args = parser.parse_args()
 
