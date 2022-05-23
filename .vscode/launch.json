@@ -31,7 +31,7 @@
             "program": "gym/experiment.py",
             "console": "integratedTerminal",
             "justMyCode": true,
-            "args": ["--env=lbforaging_separate","--model_type=dt","--device=cpu", "--behavior=cooperative",  "--num_steps_per_iter=10", "--warmup_steps=10", "--max_iters=10"]
+            "args": ["--env=lbforaging:Foraging-8x8-2p-3f-v2","--model_type=dt","--device=cpu", "--behavior=cooperative",  "--num_steps_per_iter=10", "--warmup_steps=10", "--max_iters=10"]
         },
         {
             "name": "FormatData",

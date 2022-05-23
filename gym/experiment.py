@@ -34,17 +34,27 @@ def experiment(
     device = variant.get('device', 'cuda')
     log_to_wandb = variant.get('log_to_wandb', False)
 
+    behavior = variant["behavior"]
+
     env_name, dataset = variant['env'], variant['dataset']
     model_type = variant['model_type']
     group_name = f'{exp_prefix}-{env_name}'
     random_num = random.randint(int(1e5), int(1e6) - 1)
-    exp_prefix = f'{variant["behavior"]}-{random_num}'
+    exp_prefix = f'{behavior}-{random_num}'
 
     if "lbforaging" in env_name:
-        env = gym.make(env_name)
-        #env = gym.make("Foraging-8x8-2p-3f-v2")
+        #env = gym.make(env_name)
+        env = gym.make("Foraging-8x8-2p-3f-v2")
         max_ep_len = 10000
-        env_targets = torch.Tensor([[1,1]])
+
+        if behavior == 'cooperative':
+            env_targets = torch.Tensor([[0.4,0.4]]) 
+        elif behavior == 'competitive': 
+            env_targets = torch.Tensor([[0,1]])
+        elif behavior == 'mixed':
+            env_targets = torch.Tensor([[0,1]])
+        else:
+            raise NotImplemented
         scale = 1.
     else:
         raise NotImplementedError
@@ -221,6 +231,7 @@ def experiment(
                             state_mean=state_mean,
                             state_std=state_std,
                             device=device,
+                            behavior = variant["behavior"]
                         )
                     else:
                         ret, length = evaluate_episode(
