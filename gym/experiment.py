@@ -231,7 +231,6 @@ def experiment(
                             state_mean=state_mean,
                             state_std=state_std,
                             device=device,
-                            behavior = variant["behavior"]
                         )
                     else:
                         ret, length = evaluate_episode(
