@@ -39,7 +39,7 @@ def experiment(
     if "lbforaging" in env_name:
         env = gym.make("Foraging-8x8-2p-3f-v2")
         max_ep_len = 10000
-        env_targets = torch.Tensor([1.0, 0.5, 0.3])
+        env_targets = torch.Tensor([1.0, 0.5])
         scale = 1.
     else:
         raise NotImplementedError
@@ -79,7 +79,8 @@ def experiment(
     mode = variant.get('mode', 'normal')
     states, traj_lens, returns = [], [], []
     for path in trajectories:
-        path["rewards"] = path["rewards"].sum(axis=0)
+        #path["rewards"] = path["rewards"].sum(axis=0)
+        path["rewards"] = path['rewards'][0] - path['rewards'][1]
         path["actions"] = one_hot_encode_actions(path["actions"])
         if mode == 'delayed':  # delayed: all rewards moved to end of trajectory
             path['rewards'][-1] = path['rewards'].sum()
@@ -205,8 +206,10 @@ def experiment(
                 returns.append(ret)
                 lengths.append(length)
             return {
-                f'target_{target_rew}_return_mean': np.mean(returns),
-                f'target_{target_rew}_return_std': np.std(returns),
+                f'target_{target_rew}_return_mean_agent1': torch.stack(returns).mean(dim=0).tolist()[0],   
+                f'target_{target_rew}_return_std_agent1': torch.stack(returns).std(dim=0).tolist()[0],
+                f'target_{target_rew}_return_mean_agent2': torch.stack(returns).mean(dim=0).tolist()[1],   
+                f'target_{target_rew}_return_std_agent2': torch.stack(returns).std(dim=0).tolist()[1],
                 f'target_{target_rew}_length_mean': np.mean(lengths),
                 f'target_{target_rew}_length_std': np.std(lengths),
             }
@@ -277,7 +280,7 @@ def experiment(
         wandb.init(
             name=exp_prefix,
             group=group_name,
-            project='decision-transformer_multi',
+            project='decision-transformer_multi_simple',
             config=variant
         )
         # wandb.watch(model)  # wandb has some bug

@@ -104,6 +104,7 @@ def evaluate_episode_rtg(
     combinations = product(avail_actions, repeat=env.n_agents)
     enc_action_to_actions = {i:comb for i,comb in enumerate(combinations)}
 
+    episode_returns = torch.zeros((2), device=device)
     episode_return, episode_length = 0, 0
     for t in range(max_ep_len):
 
@@ -123,6 +124,7 @@ def evaluate_episode_rtg(
 
         state, reward, done, _ = env.step(action)
         state = np.concatenate(state)
+        episode_returns += torch.Tensor(reward).to(device)
         reward = sum(reward)
         done = all(done)
 
@@ -146,4 +148,4 @@ def evaluate_episode_rtg(
         if done:
             break
 
-    return episode_return, episode_length
+    return episode_returns, episode_length
