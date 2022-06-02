@@ -45,14 +45,14 @@ def experiment(
     if "lbforaging" in env_name:
         #env = gym.make(env_name)
         env = gym.make("Foraging-8x8-2p-3f-v2")
-        max_ep_len = 10000
+        max_ep_len = 50
 
         if behavior == 'cooperative':
             env_targets = torch.Tensor([[0.4,0.4]]) 
         elif behavior == 'competitive': 
             env_targets = torch.Tensor([[0,1]])
         elif behavior == 'mixed':
-            env_targets = torch.Tensor([[0,1]])
+            env_targets = torch.Tensor([[0,1], [1,1]])
         else:
             raise NotImplemented
         scale = 1.

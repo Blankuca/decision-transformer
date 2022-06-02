@@ -54,10 +54,17 @@ class DecisionTransformer(TrajectoryModel):
 
         # note: we don't predict states or returns for the paper
         self.predict_state = torch.nn.Linear(hidden_size, self.state_dim)
-        self.predict_action = nn.Sequential(
+
+        self.predict_action_0 = nn.Sequential(
             *([nn.Linear(hidden_size, self.act_space)] + ([nn.Tanh()] if action_tanh else []))
         )
-        self.softmax_action = torch.nn.Softmax(dim=-1)
+        self.predict_action_1 = nn.Sequential(
+            *([nn.Linear(hidden_size, self.act_space)] + ([nn.Tanh()] if action_tanh else []))
+        )
+
+        self.softmax_action_0 = torch.nn.Softmax(dim=-1)
+        self.softmax_action_1 = torch.nn.Softmax(dim=-1)
+        
         self.predict_return = torch.nn.Linear(hidden_size, 1)
 
     def forward(self, states, actions, rewards, returns_to_go, timesteps, attention_mask=None):
@@ -67,7 +74,7 @@ class DecisionTransformer(TrajectoryModel):
         elif self.behavior == 'competitive': 
             returns_to_go = torch.stack([returns_to_go[player].sub(returns_to_go[~player].sum(axis=-1).unsqueeze(-1)) for player in range(self.num_players)])
         elif self.behavior == 'mixed':
-            returns_to_go = torch.stack([returns_to_go.sum(axis=0), returns_to_go[1].sub(returns_to_go[~1].sum(axis=-1).unsqueeze(-1))])
+            returns_to_go = torch.stack([returns_to_go.sum(axis=0), returns_to_go[1] - returns_to_go[~1].sum(axis=-1).unsqueeze(-1)])
         else:
             raise NotImplementedError(self.behavior)
         batch_size, seq_length = states.shape[0], states.shape[1]
@@ -119,9 +126,14 @@ class DecisionTransformer(TrajectoryModel):
         # get predictions
         return_preds = torch.stack([self.predict_return(x_player[:,2]) for x_player in x])  # predict next return given state and action
         state_preds =  torch.stack([self.predict_state(x_player[:,2]) for x_player in x])    # predict next state given state and action
-        action_preds = torch.stack([self.predict_action(x_player[:,1]) for x_player in x])  # predict next action given state
 
-        action_logits = self.softmax_action(action_preds)
+        action_preds_0 = self.predict_action_0(x[0][:,1]) # predict next action given state
+        action_preds_1 = self.predict_action_1(x[1][:,1])
+
+        action_logits_0 = self.softmax_action_0(action_preds_0)
+        action_logits_1 = self.softmax_action_1(action_preds_1)
+
+        action_logits = torch.stack([action_logits_0,action_logits_1])
 
         return state_preds, action_logits, return_preds
 
