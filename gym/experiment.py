@@ -33,12 +33,13 @@ def experiment(
 
     env_name, dataset = variant['env'], variant['dataset']
     model_type = variant['model_type']
-    group_name = f'{exp_prefix}-{env_name}-{dataset}'
+    behavior = variant['behavior']
+    group_name = f'CENTRALIZED-{behavior}-{exp_prefix}-{env_name}'
     exp_prefix = f'{group_name}-{random.randint(int(1e5), int(1e6) - 1)}'
 
     if "lbforaging" in env_name:
         env = gym.make("Foraging-8x8-2p-3f-v2")
-        max_ep_len = 10000
+        max_ep_len = 50
         env_targets = torch.Tensor([1.0, 0.5])
         scale = 1.
     else:
@@ -79,8 +80,14 @@ def experiment(
     mode = variant.get('mode', 'normal')
     states, traj_lens, returns = [], [], []
     for path in trajectories:
-        #path["rewards"] = path["rewards"].sum(axis=0)
-        path["rewards"] = path['rewards'][0] - path['rewards'][1]
+
+        if behavior == 'cooperative':
+            path["rewards"] = path["rewards"].sum(axis=0)
+        elif behavior == 'competitive':
+            path["rewards"] = path['rewards'][0] - path['rewards'][1]
+        else:
+            raise NotImplementedError(behavior)
+
         path["actions"] = one_hot_encode_actions(path["actions"])
         if mode == 'delayed':  # delayed: all rewards moved to end of trajectory
             path['rewards'][-1] = path['rewards'].sum()
@@ -280,7 +287,7 @@ def experiment(
         wandb.init(
             name=exp_prefix,
             group=group_name,
-            project='decision-transformer_multi_simple',
+            project='decision-transformer_FINAL',
             config=variant
         )
         # wandb.watch(model)  # wandb has some bug
@@ -313,6 +320,7 @@ if __name__ == '__main__':
     parser.add_argument('--num_steps_per_iter', type=int, default=10000)
     parser.add_argument('--device', type=str, default='cuda')
     parser.add_argument('--log_to_wandb', '-w', type=bool, default=False)
+    parser.add_argument('--behavior', type=str, default="")
     
     args = parser.parse_args()
 
