@@ -34,8 +34,8 @@ def experiment(
     env_name, dataset = variant['env'], variant['dataset']
     model_type = variant['model_type']
     behavior = variant['behavior']
-    group_name = f'CENTRALIZED-{behavior}-{exp_prefix}-{env_name}'
-    exp_prefix = f'{group_name}-{random.randint(int(1e5), int(1e6) - 1)}'
+    group_name = f'CENTRALIZED-{model_type}-{behavior}-{exp_prefix}-{env_name}'
+    exp_prefix = f'{random.randint(int(1e5), int(1e6) - 1)}'
 
     if "lbforaging" in env_name:
         env = gym.make("Foraging-8x8-2p-3f-v2")
@@ -117,10 +117,14 @@ def experiment(
 
     # only train on top pct_traj trajectories (for %BC experiment)
     num_timesteps = max(int(pct_traj*num_timesteps), 1)
-    sorted_inds = np.argsort(returns)  # lowest to highest
+    if model_type == "bc":
+        percentage = round(len(returns) * 0.25)
+    else:
+        percentage = len(returns)
+    sorted_inds = np.argsort(returns)[:percentage]  # lowest to highest
     num_trajectories = 1
     timesteps = traj_lens[sorted_inds[-1]]
-    ind = len(trajectories) - 2
+    ind = percentage - 2
     while ind >= 0 and timesteps + traj_lens[sorted_inds[ind]] <= num_timesteps:
         timesteps += traj_lens[sorted_inds[ind]]
         num_trajectories += 1
@@ -241,7 +245,7 @@ def experiment(
     elif model_type == 'bc':
         model = MLPBCModel(
             state_dim=state_dim,
-            act_dim=act_dim,
+            act_dim=act_space,
             max_length=K,
             hidden_size=variant['embed_dim'],
             n_layer=variant['n_layer'],

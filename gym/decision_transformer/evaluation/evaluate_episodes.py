@@ -23,6 +23,7 @@ def evaluate_episode(
     state_std = torch.from_numpy(state_std).to(device=device)
 
     state = env.reset()
+    state = np.concatenate(state)
 
     # we keep all the histories on the device
     # note that the latest action and reward will be "padding"
@@ -32,6 +33,11 @@ def evaluate_episode(
     target_return = torch.tensor(target_return, device=device, dtype=torch.float32)
     sim_states = []
 
+    avail_actions = list(range(len(env.action_set) + 1))
+    combinations = product(avail_actions, repeat=env.n_agents)
+    enc_action_to_actions = {i:comb for i,comb in enumerate(combinations)}
+
+    episode_returns = torch.zeros((2), device=device)
     episode_return, episode_length = 0, 0
     for t in range(max_ep_len):
 
@@ -45,10 +51,14 @@ def evaluate_episode(
             rewards.to(dtype=torch.float32),
             target_return=target_return,
         )
-        actions[-1] = action
-        action = action.detach().cpu().numpy()
+        actions[-1] = float(action.argmax())
+        action = enc_action_to_actions[int(actions[-1])]
 
         state, reward, done, _ = env.step(action)
+        state = np.concatenate(state)
+        episode_returns += torch.Tensor(reward).to(device)
+        reward = sum(reward)
+        done = all(done)
 
         cur_state = torch.from_numpy(state).to(device=device).reshape(1, state_dim)
         states = torch.cat([states, cur_state], dim=0)
@@ -60,7 +70,7 @@ def evaluate_episode(
         if done:
             break
 
-    return episode_return, episode_length
+    return episode_returns, episode_length
 
 
 def evaluate_episode_rtg(

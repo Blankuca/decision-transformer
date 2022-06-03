@@ -29,6 +29,7 @@ class MLPBCModel(TrajectoryModel):
             nn.Dropout(dropout),
             nn.Linear(hidden_size, self.act_dim),
             nn.Tanh(),
+            nn.Softmax(dim=1)
         ])
 
         self.model = nn.Sequential(*layers)

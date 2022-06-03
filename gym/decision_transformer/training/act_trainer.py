@@ -2,7 +2,7 @@ import numpy as np
 import torch
 
 from decision_transformer.training.trainer import Trainer
-
+from torch.nn import functional as F
 
 class ActTrainer(Trainer):
 
@@ -15,13 +15,14 @@ class ActTrainer(Trainer):
         )
 
         act_dim = action_preds.shape[2]
-        action_preds = action_preds.reshape(-1, act_dim)
-        action_target = action_target[:,-1].reshape(-1, act_dim)
+        n_act = action_preds.shape[2]
+        action_preds = action_preds.reshape(-1, n_act)
+        action_target = action_target[:,-1]
 
-        loss = self.loss_fn(
-            state_preds, action_preds, reward_preds,
-            state_target, action_target, reward_target,
-        )
+        action_target = action_target.reshape(-1).long()
+
+        loss = F.cross_entropy(action_preds.reshape(-1, n_act), action_target.long())
+
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()

@@ -34,13 +34,13 @@
             "args": ["--env=lbforaging_separate", "--behavior=cooperative", "--dataset=medium","--model_type=dt","--device=cpu",  "--num_steps_per_iter=10", "--warmup_steps=10", "--max_iters=10"]
         },
         {
-            "name": "Gym-LBForaging-OnePlayer",
+            "name": "Gym-LBForaging-BC",
             "type": "python",
             "request": "launch",
             "program": "gym/experiment.py",
             "console": "integratedTerminal",
             "justMyCode": true,
-            "args": ["--env=lbforaging_one", "--dataset=medium","--model_type=dt","--device=cpu",  "--num_steps_per_iter=10", "--warmup_steps=10", "--max_iters=10"]
+            "args": ["--env=lbforaging_separate", "--behavior=cooperative", "--dataset=medium","--model_type=bc","--device=cpu",  "--num_steps_per_iter=10", "--warmup_steps=10", "--max_iters=10"]
         },
         {
             "name": "FormatData",

@@ -18,8 +18,11 @@ class SequenceTrainer(Trainer):
         n_act = action_preds.shape[2]
         action_preds = action_preds.reshape(-1, n_act)[attention_mask.unsqueeze(-1).repeat(1, 1, 1, 36).reshape(-1, n_act) > 0]
         action_target = action_target.reshape(-1, act_dim)[attention_mask.reshape(-1) > 0]
+        
+        action_preds = action_preds.reshape(-1, n_act)
+        action_target = action_target.reshape(-1).long()
 
-        loss = F.cross_entropy(action_preds.reshape(-1, n_act), action_target.reshape(-1).long())
+        loss = F.cross_entropy(action_preds, action_target)
 
         self.optimizer.zero_grad()
         loss.backward()
