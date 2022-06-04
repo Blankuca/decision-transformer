@@ -38,9 +38,9 @@ def experiment(
 
     env_name, dataset = variant['env'], variant['dataset']
     model_type = variant['model_type']
-    group_name = f'{exp_prefix}-{env_name}'
+    group_name = f'DECENTRALIZED-{behavior}-{exp_prefix}-{env_name}'
     random_num = random.randint(int(1e5), int(1e6) - 1)
-    exp_prefix = f'{behavior}-{random_num}'
+    exp_prefix = f'{random_num}'
 
     if "lbforaging" in env_name:
         #env = gym.make(env_name)
@@ -48,7 +48,7 @@ def experiment(
         max_ep_len = 50
 
         if behavior == 'cooperative':
-            env_targets = torch.Tensor([[0.4,0.4]]) 
+            env_targets = torch.Tensor([[0.5,0.5]]) 
         elif behavior == 'competitive': 
             env_targets = torch.Tensor([[0,1]])
         elif behavior == 'mixed':
@@ -331,7 +331,7 @@ def experiment(
         wandb.init(
             name=exp_prefix,
             group=group_name,
-            project='multi-agent_decision-transformer',
+            project='decision-transformer_FINAL',
             config=variant
         )
         # wandb.watch(model)  # wandb has some bug
