@@ -84,7 +84,7 @@ def experiment(
         else:
             raise NotImplementedError(behavior)
         max_num_trajectories = len(trajectories)//10
-        trajectories = [trajectories[i] for i in sorted_inds[:max_num_trajectories]]
+        trajectories = [trajectories[i] for i in sorted_inds[-max_num_trajectories:]]
         
     # save all path information into separate lists
     mode = variant.get('mode', 'normal')
