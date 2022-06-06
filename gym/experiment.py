@@ -75,6 +75,16 @@ def experiment(
 
         actions = np.transpose(actions)
         return torch.Tensor([actions_one_hot[tuple(x)] for x in actions]).type(torch.int64)
+
+    if model_type == "bc":
+        if behavior == 'cooperative':
+            sorted_inds = np.argsort([t["rewards"].sum() for t in trajectories])
+        elif behavior == 'competitive':
+            sorted_inds = np.argsort([(t['rewards'][0] - torch.T['rewards'][1]).sum() for t in trajectories])
+        else:
+            raise NotImplementedError(behavior)
+        max_num_trajectories = len(trajectories)//10
+        trajectories = [trajectories[i] for i in sorted_inds[:max_num_trajectories]]
         
     # save all path information into separate lists
     mode = variant.get('mode', 'normal')
@@ -117,14 +127,10 @@ def experiment(
 
     # only train on top pct_traj trajectories (for %BC experiment)
     num_timesteps = max(int(pct_traj*num_timesteps), 1)
-    if model_type == "bc":
-        percentage = round(len(returns) * 0.25)
-    else:
-        percentage = len(returns)
-    sorted_inds = np.argsort(returns)[:percentage]  # lowest to highest
+    sorted_inds = np.argsort(returns)  # lowest to highest
     num_trajectories = 1
     timesteps = traj_lens[sorted_inds[-1]]
-    ind = percentage - 2
+    ind = len(trajectories) - 2
     while ind >= 0 and timesteps + traj_lens[sorted_inds[ind]] <= num_timesteps:
         timesteps += traj_lens[sorted_inds[ind]]
         num_trajectories += 1

@@ -30,7 +30,6 @@ def evaluate_episode(
     states = torch.from_numpy(state).reshape(1, state_dim).to(device=device, dtype=torch.float32)
     actions = torch.zeros((0, act_dim), device=device, dtype=torch.float32)
     rewards = torch.zeros(0, device=device, dtype=torch.float32)
-    target_return = torch.tensor(target_return, device=device, dtype=torch.float32)
     sim_states = []
 
     avail_actions = list(range(len(env.action_set) + 1))
@@ -38,18 +37,17 @@ def evaluate_episode(
     enc_action_to_actions = {i:comb for i,comb in enumerate(combinations)}
 
     episode_returns = torch.zeros((2), device=device)
-    episode_return, episode_length = 0, 0
+    episode_length = 0
     for t in range(max_ep_len):
 
         # add padding
         actions = torch.cat([actions, torch.zeros((1, act_dim), device=device)], dim=0)
-        rewards = torch.cat([rewards, torch.zeros(1, device=device)])
 
         action = model.get_action(
             (states.to(dtype=torch.float32) - state_mean) / state_std,
             actions.to(dtype=torch.float32),
-            rewards.to(dtype=torch.float32),
-            target_return=target_return,
+            None,
+            target_return=None,
         )
         actions[-1] = float(action.argmax())
         action = enc_action_to_actions[int(actions[-1])]
@@ -57,14 +55,11 @@ def evaluate_episode(
         state, reward, done, _ = env.step(action)
         state = np.concatenate(state)
         episode_returns += torch.Tensor(reward).to(device)
-        reward = sum(reward)
         done = all(done)
 
         cur_state = torch.from_numpy(state).to(device=device).reshape(1, state_dim)
         states = torch.cat([states, cur_state], dim=0)
-        rewards[-1] = reward
 
-        episode_return += reward
         episode_length += 1
 
         if done:

@@ -21,7 +21,7 @@ class ActTrainer(Trainer):
 
         action_target = action_target.reshape(-1).long()
 
-        loss = F.cross_entropy(action_preds.reshape(-1, n_act), action_target.long())
+        loss = F.cross_entropy(action_preds, action_target)
 
         self.optimizer.zero_grad()
         loss.backward()
