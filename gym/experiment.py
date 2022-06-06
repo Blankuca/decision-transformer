@@ -80,7 +80,7 @@ def experiment(
         if behavior == 'cooperative':
             sorted_inds = np.argsort([t["rewards"].sum() for t in trajectories])
         elif behavior == 'competitive':
-            sorted_inds = np.argsort([(t['rewards'][0] - torch.T['rewards'][1]).sum() for t in trajectories])
+            sorted_inds = np.argsort([(t['rewards'][0] - t['rewards'][1]).sum() for t in trajectories])
         else:
             raise NotImplementedError(behavior)
         max_num_trajectories = len(trajectories)//10
