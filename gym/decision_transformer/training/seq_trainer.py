@@ -16,7 +16,8 @@ class SequenceTrainer(Trainer):
 
         act_dim = action_target.shape[2]
         n_act = action_preds.shape[2]
-        action_preds = action_preds.reshape(-1, n_act)[attention_mask.unsqueeze(-1).repeat(1, 1, 1, 36).reshape(-1, n_act) > 0]
+        n_actions = action_preds.shape[-1]
+        action_preds = action_preds.reshape(-1, n_act)[attention_mask.unsqueeze(-1).repeat(1, 1, 1, n_actions).reshape(-1, n_act) > 0]
         action_target = action_target.reshape(-1, act_dim)[attention_mask.reshape(-1) > 0]
         
         action_preds = action_preds.reshape(-1, n_act)

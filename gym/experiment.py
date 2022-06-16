@@ -2,6 +2,7 @@ import gym
 import numpy as np
 import torch
 import wandb
+from itertools import product
 
 import argparse
 import pickle
@@ -15,6 +16,7 @@ from decision_transformer.training.act_trainer import ActTrainer
 from decision_transformer.training.seq_trainer import SequenceTrainer
 
 import lbforaging
+import rware
 
 def discount_cumsum(x, gamma):
     discount_cumsum = np.zeros_like(x)
@@ -40,7 +42,12 @@ def experiment(
     if "lbforaging" in env_name:
         env = gym.make("Foraging-8x8-2p-3f-v2")
         max_ep_len = 50
-        env_targets = torch.Tensor([1.0, 0.5])
+        env_targets = torch.Tensor([2.0, 1.0])
+        scale = 1.
+    if "rware" in env_name:
+        env = gym.make("rware-tiny-2ag-v1", request_queue_size=3)
+        max_ep_len = 500
+        env_targets = torch.Tensor([3.0, 2.0, 1.0])
         scale = 1.
     else:
         raise NotImplementedError
@@ -52,38 +59,50 @@ def experiment(
         num_players = env.n_agents
         state_dim = env.observation_space[0].shape[0] * num_players
         act_dim = 1
+        
+    elif "rware" in env_name:
+        num_players = env.n_agents
+        state_dim = env.observation_space[0].shape[0] * num_players
+        act_dim = 1
+
     else:
         state_dim = env.observation_space.shape[0]
         act_dim = env.action_space.shape[0]
 
     # load dataset
-    dataset_path = f'gym/data/{env_name}-{dataset}-v2.pkl'
+    dataset_path = f'gym/data/{env_name}.pkl'
     with open(dataset_path, 'rb') as f:
         trajectories = pickle.load(f)
 
     def get_action_mapping():
-        from itertools import product
-
-        avail_actions = list(range(len(env.action_set) + 1))
+        avail_actions = list(range(env.action_space[0].n))
         combinations = product(avail_actions, repeat=env.n_agents)
         return {comb:i for i,comb in enumerate(combinations)}
-
     actions_one_hot = get_action_mapping()
     act_space = len(actions_one_hot)
-
     def one_hot_encode_actions(actions):
-
         actions = np.transpose(actions)
         return torch.Tensor([actions_one_hot[tuple(x)] for x in actions]).type(torch.int64)
 
-    if model_type == "bc":
+    def one_hot_encode_goals(goals):
+        avail_cells = list(range(env.grid_size[0]*env.grid_size[1]))
+        combinations = product(range(env.grid_size[0]), repeat=env.grid_size[1])
+        goals_map = {comb:i for i,comb in enumerate(combinations)}
+        goals_encoded = []
+        for goal in goals:
+            goals_encoded.append(goals_map)
+        return goals_encoded
+
+    #goals_encoded = one_hot_encode_goals(env.goals)
+
+    if model_type == "dt":
         if behavior == 'cooperative':
             sorted_inds = np.argsort([t["rewards"].sum() for t in trajectories])
         elif behavior == 'competitive':
             sorted_inds = np.argsort([(t['rewards'][0] - t['rewards'][1]).sum() for t in trajectories])
         else:
             raise NotImplementedError(behavior)
-        max_num_trajectories = len(trajectories)//10
+        max_num_trajectories = len(trajectories)//20
         trajectories = [trajectories[i] for i in sorted_inds[-max_num_trajectories:]]
         
     # save all path information into separate lists
@@ -105,7 +124,7 @@ def experiment(
         states.append(path['states'])
         traj_lens.append(len(path['states']))
         returns.append(path['rewards'].sum())
-    traj_lens, returns = np.array(traj_lens), np.array(returns)
+    traj_lens, returns = np.array(traj_lens), np.array(returns)/scale
 
     # used for input normalization
     states = np.concatenate(states, axis=0)
@@ -201,7 +220,7 @@ def experiment(
                             model,
                             max_ep_len=max_ep_len,
                             scale=scale,
-                            target_return=target_rew/scale,
+                            target_return=target_rew,
                             mode=mode,
                             state_mean=state_mean,
                             state_std=state_std,
@@ -214,7 +233,7 @@ def experiment(
                             act_dim,
                             model,
                             max_ep_len=max_ep_len,
-                            target_return=target_rew/scale,
+                            target_return=target_rew,
                             mode=mode,
                             state_mean=state_mean,
                             state_std=state_std,
@@ -313,7 +332,7 @@ if __name__ == '__main__':
     parser.add_argument('--env', type=str, default='hopper')
     parser.add_argument('--dataset', type=str, default='medium')  # medium, medium-replay, medium-expert, expert
     parser.add_argument('--mode', type=str, default='normal')  # normal for standard setting, delayed for sparse
-    parser.add_argument('--K', type=int, default=20)
+    parser.add_argument('--K', type=int, default=80)
     parser.add_argument('--pct_traj', type=float, default=1.)
     parser.add_argument('--batch_size', type=int, default=64)
     parser.add_argument('--model_type', type=str, default='dt')  # dt for decision transformer, bc for behavior cloning
