@@ -16,6 +16,7 @@ from decision_transformer.training.act_trainer import ActTrainer
 from decision_transformer.training.seq_trainer import SequenceTrainer
 
 import lbforaging
+import rware
 
 import csv
 
@@ -56,6 +57,20 @@ def experiment(
         else:
             raise NotImplemented
         scale = 1.
+    elif "rware" in env_name:
+        #env = gym.make(env_name)
+        env = gym.make("rware-tiny-2ag-v1", request_queue_size=3)
+        max_ep_len = 100
+
+        if behavior == 'cooperative':
+            env_targets = torch.Tensor([[2,2]]) 
+        elif behavior == 'competitive': 
+            env_targets = torch.Tensor([[0,1]])
+        elif behavior == 'mixed':
+            env_targets = torch.Tensor([[0,1], [1,1]])
+        else:
+            raise NotImplemented
+        scale = 1.
     else:
         raise NotImplementedError
         
@@ -63,6 +78,10 @@ def experiment(
         env_targets = env_targets[:1]  # since BC ignores target, no need for different evaluations
 
     if "lbforaging" in env_name:
+        num_players = env.n_agents
+        state_dim = env.observation_space[0].shape[0] * num_players
+        act_dim = 1
+    elif "rware" in env_name:
         num_players = env.n_agents
         state_dim = env.observation_space[0].shape[0] * num_players
         act_dim = 1
@@ -89,7 +108,7 @@ def experiment(
     def get_action_mapping():
         from itertools import product
 
-        avail_actions = list(range(len(env.action_set) + 1))
+        avail_actions = list(range(len(env.action_set) + 1)) if "lbforaging" in env_name else list(range(env.action_space[0].n))
         combinations = product(avail_actions, repeat=env.n_agents)
         return {comb:i for i,comb in enumerate(combinations)}, {i:comb for i,comb in enumerate(combinations)}
 
@@ -100,6 +119,15 @@ def experiment(
 
         actions = np.transpose(actions)
         return torch.Tensor([actions_to_one_hot[tuple(x)] for x in actions]).type(torch.int64)
+
+    if behavior == 'cooperative':
+        sorted_inds = np.argsort([t["rewards"].sum() for t in trajectories])
+    elif behavior == 'competitive':
+        sorted_inds = np.argsort([(t['rewards'][0] - t['rewards'][1]).sum() for t in trajectories])
+    else:
+        raise NotImplementedError(behavior)
+    max_num_trajectories = len(trajectories)//10
+    trajectories = [trajectories[i] for i in sorted_inds[-max_num_trajectories:]]
         
     # save all path information into separate lists
     mode = variant.get('mode', 'normal')
@@ -269,7 +297,7 @@ def experiment(
             state_dim=state_dim,
             act_dim=act_dim,
             num_players = num_players,
-            act_space=len(env.action_set) + 1,
+            act_space=len(env.action_set) + 1 if "lbforaging" in env_name else env.action_space[0].n,
             max_length=K,
             max_ep_len=max_ep_len,
             hidden_size=variant['embed_dim'],
@@ -350,7 +378,7 @@ if __name__ == '__main__':
     parser.add_argument('--env', type=str, default='hopper')
     parser.add_argument('--dataset', type=str, default='medium')  # medium, medium-replay, medium-expert, expert
     parser.add_argument('--mode', type=str, default='normal')  # normal for standard setting, delayed for sparse
-    parser.add_argument('--K', type=int, default=20)
+    parser.add_argument('--K', type=int, default=80)
     parser.add_argument('--pct_traj', type=float, default=1.)
     parser.add_argument('--batch_size', type=int, default=64)
     parser.add_argument('--model_type', type=str, default='dt')  # dt for decision transformer, bc for behavior cloning

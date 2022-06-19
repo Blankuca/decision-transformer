@@ -103,7 +103,8 @@ def evaluate_episode_rtg(
 
     sim_states = []
 
-    avail_actions = list(range(len(env.action_set) + 1))
+    #avail_actions = list(range(len(env.action_set) + 1))
+    avail_actions = list(range(env.action_space[0].n))
     combinations = list(product(avail_actions, repeat=num_agents))
     enc_action_to_actions = {i:comb for i,comb in enumerate(combinations)}
     actions_to_enc_actions = {comb:i for i,comb in enumerate(combinations)}
@@ -129,7 +130,7 @@ def evaluate_episode_rtg(
         state, reward, done, _ = env.step(action)
         state = np.concatenate(state)
         reward = torch.FloatTensor(reward).to(device=device)
-        done = all(done)
+        done = all(done) or (episode_return.sum() > 2)
 
         cur_state = torch.from_numpy(state).to(device=device).reshape(1, state_dim)
         states = torch.cat([states, cur_state], dim=0)

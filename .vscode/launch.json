@@ -25,6 +25,15 @@
             //"preLaunchTask": "run-gpu"
         },
         {
+            "name": "Gym-RWARE",
+            "type": "python",
+            "request": "launch",
+            "program": "gym/experiment.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": ["--env=rware:rware-tiny-2ag-v1_mappo_3", "--behavior=cooperative", "--dataset=medium","--model_type=dt","--device=cpu",  "--num_steps_per_iter=10", "--warmup_steps=10", "--max_iters=10"]
+        },
+        {
             "name": "Gym-LBForaging",
             "type": "python",
             "request": "launch",
