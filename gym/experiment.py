@@ -109,6 +109,10 @@ def experiment(
     mode = variant.get('mode', 'normal')
     states, traj_lens, returns = [], [], []
     for path in trajectories:
+        path["rewards"] = path["rewards"][:,1:]
+        path["actions"] = path["actions"][:,1:]
+        path["terminals"] = path["terminals"][1:]
+        path["states"] = path["states"][:-1]
 
         if behavior == 'cooperative':
             path["rewards"] = path["rewards"].sum(axis=0)
