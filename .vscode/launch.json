@@ -31,7 +31,7 @@
             "program": "gym/experiment.py",
             "console": "integratedTerminal",
             "justMyCode": true,
-            "args": ["--env=lbforaging_separate", "--behavior=cooperative", "--dataset=medium","--model_type=dt","--device=cpu",  "--num_steps_per_iter=10", "--warmup_steps=10", "--max_iters=10"]
+            "args": ["--env=lbforaging:Foraging-8x8-2p-3f-v2", "--behavior=competitive", "--dataset=medium","--model_type=dt","--device=cpu",  "--num_steps_per_iter=10", "--warmup_steps=10", "--max_iters=10"]
         },
         {
             "name": "Gym-RWARE",
@@ -40,7 +40,7 @@
             "program": "gym/experiment.py",
             "console": "integratedTerminal",
             "justMyCode": true,
-            "args": ["--env=rware:rware-tiny-2ag-v1_mappo_3", "--behavior=cooperative", "--dataset=medium","--model_type=dt","--device=cpu",  "--num_steps_per_iter=10", "--warmup_steps=10", "--max_iters=10"]
+            "args": ["--env=rware:rware-tiny-2ag-v1_mappo_2", "--behavior=competitive", "--dataset=medium","--model_type=dt","--device=cpu",  "--num_steps_per_iter=10", "--warmup_steps=10", "--max_iters=10"]
         },
         {
             "name": "Gym-LBForaging-BC",

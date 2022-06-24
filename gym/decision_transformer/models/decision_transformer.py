@@ -23,6 +23,7 @@ class DecisionTransformer(TrajectoryModel):
             max_length=None,
             max_ep_len=4096,
             action_tanh=True,
+            mode = "dt",
             **kwargs
     ):
         super().__init__(state_dim, act_dim, max_length=max_length)
@@ -34,6 +35,8 @@ class DecisionTransformer(TrajectoryModel):
             n_embd=hidden_size,
             **kwargs
         )
+
+        self.mode = mode
 
         # note: the only difference between this GPT2Model and the default Huggingface version
         # is that the positional embeddings are removed (since we'll add those ourselves)
@@ -72,6 +75,9 @@ class DecisionTransformer(TrajectoryModel):
         state_embeddings = state_embeddings + time_embeddings
         action_embeddings = action_embeddings + time_embeddings
         returns_embeddings = returns_embeddings + time_embeddings
+
+        if self.mode == "bc":
+            returns_embeddings = torch.zeros(returns_embeddings.size()).to("cuda")
 
         # this makes the sequence look like (R_1, s_1, a_1, R_2, s_2, a_2, ...)
         # which works nice in an autoregressive sense since states predict actions

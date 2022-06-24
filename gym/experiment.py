@@ -42,18 +42,18 @@ def experiment(
     if "lbforaging" in env_name:
         env = gym.make("Foraging-8x8-2p-3f-v2")
         max_ep_len = 50
-        env_targets = torch.Tensor([2.0, 1.0])
+        env_targets = torch.Tensor([1.0])
         scale = 1.
-    if "rware" in env_name:
-        env = gym.make("rware-tiny-2ag-v1", request_queue_size=3)
-        max_ep_len = 500
-        env_targets = torch.Tensor([3.0, 2.0, 1.0])
+    elif "rware" in env_name:
+        env = gym.make("rware-tiny-2ag-v1")
+        max_ep_len = 100
+        env_targets = torch.Tensor([1.0])
         scale = 1.
     else:
         raise NotImplementedError
 
-    if model_type == 'bc':
-        env_targets = env_targets[:1]  # since BC ignores target, no need for different evaluations
+    #if model_type == 'bc':
+    #    env_targets = env_targets[:1]  # since BC ignores target, no need for different evaluations
 
     if "lbforaging" in env_name:
         num_players = env.n_agents
@@ -95,15 +95,15 @@ def experiment(
 
     #goals_encoded = one_hot_encode_goals(env.goals)
 
-    if model_type == "dt":
-        if behavior == 'cooperative':
-            sorted_inds = np.argsort([t["rewards"].sum() for t in trajectories])
-        elif behavior == 'competitive':
-            sorted_inds = np.argsort([(t['rewards'][0] - t['rewards'][1]).sum() for t in trajectories])
-        else:
-            raise NotImplementedError(behavior)
-        max_num_trajectories = len(trajectories)//20
-        trajectories = [trajectories[i] for i in sorted_inds[-max_num_trajectories:]]
+    # if model_type == "bc":
+    #     if behavior == 'cooperative':
+    #         sorted_inds = np.argsort([t["rewards"].sum() for t in trajectories])
+    #     elif behavior == 'competitive':
+    #         sorted_inds = np.argsort([(t['rewards'][0] - t['rewards'][1]).sum() for t in trajectories])
+    #     else:
+    #         raise NotImplementedError(behavior)
+    #     max_num_trajectories = len(trajectories)//20
+    #     trajectories = [trajectories[i] for i in sorted_inds[-max_num_trajectories:]]
         
     # save all path information into separate lists
     mode = variant.get('mode', 'normal')
@@ -216,7 +216,6 @@ def experiment(
             returns, lengths = [], []
             for _ in range(num_eval_episodes):
                 with torch.no_grad():
-                    if model_type == 'dt':
                         ret, length = evaluate_episode_rtg(
                             env,
                             state_dim,
@@ -224,19 +223,6 @@ def experiment(
                             model,
                             max_ep_len=max_ep_len,
                             scale=scale,
-                            target_return=target_rew,
-                            mode=mode,
-                            state_mean=state_mean,
-                            state_std=state_std,
-                            device=device,
-                        )
-                    else:
-                        ret, length = evaluate_episode(
-                            env,
-                            state_dim,
-                            act_dim,
-                            model,
-                            max_ep_len=max_ep_len,
                             target_return=target_rew,
                             mode=mode,
                             state_mean=state_mean,
@@ -255,32 +241,22 @@ def experiment(
             }
         return fn
 
-    if model_type == 'dt':
-        model = DecisionTransformer(
-            state_dim=state_dim,
-            act_dim=act_dim,
-            act_space=act_space,
-            max_length=K,
-            max_ep_len=max_ep_len,
-            hidden_size=variant['embed_dim'],
-            n_layer=variant['n_layer'],
-            n_head=variant['n_head'],
-            n_inner=4*variant['embed_dim'],
-            activation_function=variant['activation_function'],
-            n_positions=1024,
-            resid_pdrop=variant['dropout'],
-            attn_pdrop=variant['dropout'],
-        )
-    elif model_type == 'bc':
-        model = MLPBCModel(
-            state_dim=state_dim,
-            act_dim=act_space,
-            max_length=K,
-            hidden_size=variant['embed_dim'],
-            n_layer=variant['n_layer'],
-        )
-    else:
-        raise NotImplementedError
+    model = DecisionTransformer(
+        state_dim=state_dim,
+        act_dim=act_dim,
+        act_space=act_space,
+        max_length=K,
+        max_ep_len=max_ep_len,
+        hidden_size=variant['embed_dim'],
+        n_layer=variant['n_layer'],
+        n_head=variant['n_head'],
+        n_inner=4*variant['embed_dim'],
+        activation_function=variant['activation_function'],
+        n_positions=1024,
+        resid_pdrop=variant['dropout'],
+        attn_pdrop=variant['dropout'],
+        mode = model_type
+    )
 
     model = model.to(device=device)
 
@@ -295,26 +271,15 @@ def experiment(
         lambda steps: min((steps+1)/warmup_steps, 1)
     )
 
-    if model_type == 'dt':
-        trainer = SequenceTrainer(
-            model=model,
-            optimizer=optimizer,
-            batch_size=batch_size,
-            get_batch=get_batch,
-            scheduler=scheduler,
-            loss_fn=lambda s_hat, a_hat, r_hat, s, a, r: torch.mean((a_hat - a)**2),
-            eval_fns=[eval_episodes(tar) for tar in env_targets],
-        )
-    elif model_type == 'bc':
-        trainer = ActTrainer(
-            model=model,
-            optimizer=optimizer,
-            batch_size=batch_size,
-            get_batch=get_batch,
-            scheduler=scheduler,
-            loss_fn=lambda s_hat, a_hat, r_hat, s, a, r: torch.mean((a_hat - a)**2),
-            eval_fns=[eval_episodes(tar) for tar in env_targets],
-        )
+    trainer = SequenceTrainer(
+        model=model,
+        optimizer=optimizer,
+        batch_size=batch_size,
+        get_batch=get_batch,
+        scheduler=scheduler,
+        loss_fn=lambda s_hat, a_hat, r_hat, s, a, r: torch.mean((a_hat - a)**2),
+        eval_fns=[eval_episodes(tar) for tar in env_targets],
+    )
 
     if log_to_wandb:
         wandb.init(
