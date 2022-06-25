@@ -59,7 +59,7 @@ def experiment(
         scale = 1.
     elif "rware" in env_name:
         #env = gym.make(env_name)
-        env = gym.make("rware-tiny-2ag-v1", request_queue_size=3)
+        env = gym.make("rware-tiny-2ag-v1")
         max_ep_len = 100
 
         if behavior == 'cooperative':
